@@ -7,9 +7,12 @@
 // Decimal valyue type: Unsigned
 int calculateCrc(List<int> bytes) {
   var crc = 0xffffffff;
-  for (var z in bytes) {
-    crc = (crc >> 8) ^ crc32_table[(crc & 255) ^ z];
+  final length = bytes.length;
+
+  for (var i = 0; i < length; i++) {
+    crc = (crc >> 8) ^ crc32_table[(crc & 255) ^ bytes[i]];
   }
+
   return (~crc).toUnsigned(32);
 }
 
