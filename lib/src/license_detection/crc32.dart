@@ -5,7 +5,7 @@
 // RefIn  : true
 // RefOut : true
 // Decimal valyue type: Unsigned
-int calculateCrc(List<int> bytes) {
+int crc32(List<int> bytes) {
   var crc = 0xffffffff;
   final length = bytes.length;
 
