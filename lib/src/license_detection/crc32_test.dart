@@ -28,7 +28,7 @@ void main() {
   /// json.dump(jsonJ, f)
   /// ```
   /// [GO crc32 package] : https://golang.org/pkg/hash/crc32/
-  group('Random vectors', () {
+  group('crc32 - random vectors', () {
     z.forEach((key, value) {
       test(key, () {
         expect(crc32(utf8.encode(key)), value);
