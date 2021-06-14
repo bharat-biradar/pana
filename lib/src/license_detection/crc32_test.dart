@@ -39,7 +39,7 @@ void main() {
   final allAscii = File('./lib/src/license_detection/crc32_ascii_values.json');
   z = jsonDecode(allAscii.readAsStringSync()) as Map<String, dynamic>;
 
-  group('All ascii value ', () {
+  group('crc32 - all ascii value ', () {
     z.forEach((key, value) {
       test('Ascii value $key', () {
         expect(crc32([int.parse(key)]), value);
