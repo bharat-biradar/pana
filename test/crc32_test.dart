@@ -26,8 +26,8 @@ void main() {
   ///     jsonJ[res] = crc
   /// json.dump(jsonJ, f)
   /// ```
-  /// [GO crc32 package]: https://golang.org/pkg/hash/crc32/
-  group('Random vectors', () {
+  /// [GO crc32 package] : https://golang.org/pkg/hash/crc32/
+  group('crc32 - random vectors', () {
     z.forEach((key, value) {
       test(key, () {
         expect(crc32(utf8.encode(key)), value);
@@ -38,7 +38,7 @@ void main() {
   final allAscii = File('test/license_test_assets/crc32_ascii_values.json');
   z = jsonDecode(allAscii.readAsStringSync()) as Map<String, dynamic>;
 
-  group('All ascii value ', () {
+  group('crc32 - all ascii value ', () {
     z.forEach((key, value) {
       test('Ascii value $key', () {
         expect(crc32([int.parse(key)]), value);
