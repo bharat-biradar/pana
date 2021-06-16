@@ -5,71 +5,66 @@ import 'package:source_span/source_span.dart';
 import 'package:string_scanner/string_scanner.dart';
 
 @sealed
-class NewToken {
-  final String normalizedText;
-  final int tokenID;
-  final int line;
-  final FileSpan fileSpan;
+class Token {
+  /// Normalized form of the text in [fileSpan].
+  final String value;
 
-  NewToken(this.normalizedText, this.tokenID, this.line, this.fileSpan);
+  /// Denotes the token position.
+  final int tokenID;
+
+  /// Zero based line number of token.
+  final int line;
+
+  /// SourceSpan of the token.
+  final SourceSpan fileSpan;
+
+  Token(this.value, this.tokenID, this.line, this.fileSpan);
+
+  Token.fromSpan(this.fileSpan, this.tokenID)
+      : value = _normalizeWord(fileSpan.text.toLowerCase()),
+        line = fileSpan.start.line;
 }
 
-List<NewToken> newTokenizer(String text) {
-  // Guideline 3.1.1: All whitespace should be treated as a single blank space.
-  text = text.replaceAll(_horizontalWhiteSpaceRegex, ' ');
-
-  // Guideline 5: Equivalent Punctuation marks
-  // Replacing punctuations before tokenizing as
-  // SpanScanner deals with one UTF-16 codepoint at at a time
-  // and dealing with surrogate pairs will be problem.
-  // This won't effect either offset, line or column of original text.
-  _equivalentPunctuationMarks.forEach((reg, value) {
-    text = text.replaceAll(reg, value);
-  });
-
-  // Add a space to properly read the last token
-  // without having extra if-conditions.
-  text = text + ' ';
-
+List<Token> tokenizer(String text) {
   final _scanner = SpanScanner(text);
 
-  var tokens = <NewToken>[];
+  var tokens = <Token>[];
   var tokenID = 0;
 
+  Token? nextToken() {
+    if (_scanner.scan(_wordRegex)) {
+      return Token.fromSpan(_scanner.lastSpan!, tokenID++);
+    }
+
+    if (_scanner.scan(_newLineRegex)) {
+      return Token.fromSpan(_scanner.lastSpan!, tokenID++);
+    }
+
+    // Ignore whitespace
+    if (_scanner.scan(_horizontalWhiteSpaceRegex)) {
+      return null;
+    }
+
+    // Read only © and ignore other leading and standalone puntuation
+    // if(_scanner.scan(RegExp(r'©'))){
+    //   return NewToken.fromSpan(_scanner.lastSpan!, tokenID++);
+    // }
+
+    // If none of the above conditions match, this implies
+    // the scanner is at single punctuation mark or leading
+    // punctuation in a word. Ignore them and move the scanner forward.
+    _scanner.readChar();
+    return null;
+  }
+
   /// Scans through the input text and creates a list of [NewToken]
-  /// Whitespace is ignored but newLine token is stored to deal with list Items.
-  /// Any Leading or standalone punctuation form a separate token
-  /// Example `! !hello!` --> `!`, `!`, `hello!`
+  /// Whitespace, Leading or standalone punctuation are ignored as they are not significant.
+  /// But newLine token is stored to deal with list Items.\
   while (!_scanner.isDone) {
-    var prevState = _scanner.state;
-    var char = _scanner.readChar();
+    final token = nextToken();
 
-    // Check if the character is alphanumeric,
-    // If it is create a span until you reach space or new Line.
-    // If not create a span for of the single character.
-    // This approach will help us to deal with comment indicators, bullets
-    // and list items.
-    if (_isAlphaNumeric(char)) {
-      while (!_scanner.isDone) {
-        char = _scanner.readChar();
-        if (_isSpace(char) || char == 10) {
-          break;
-        }
-      }
-
-      // Move the scanner back to exclude space or newLine character
-      // from token.
-      _scanner.position--;
-      _addNewToken(_scanner.spanFrom(prevState), tokenID++, tokens);
-
-      prevState = _scanner.state;
-      _scanner.position++;
-
-      if (_isNewLine(char)) {
-        _addNewToken(_scanner.spanFrom(prevState), tokenID++, tokens);
-      }
-    } else if (!_isSpace(char)) {
-      _addNewToken(_scanner.spanFrom(prevState), tokenID++, tokens);
+    if (token != null) {
+      tokens.add(token);
     }
   }
 
@@ -81,14 +76,8 @@ List<NewToken> newTokenizer(String text) {
   return tokens;
 }
 
-void _addNewToken(FileSpan fileSpan, int tokenID, List<NewToken> tokens) {
-  final normText = fileSpan.text.toLowerCase();
-  final tok = NewToken(normText, tokenID++, fileSpan.start.line, fileSpan);
-  tokens.add(tok);
-}
-
-List<NewToken> _cleanNewTokens(List<NewToken> tokens) {
-  var output = <NewToken>[];
+List<Token> _cleanNewTokens(List<Token> tokens) {
+  var output = <Token>[];
   var tokenID = 0;
   var firstInLine = true;
 
@@ -96,29 +85,21 @@ List<NewToken> _cleanNewTokens(List<NewToken> tokens) {
     // Ignore new line tokens for now.
     // If accuracy of detection is low apply
     // Guideline 2.1.4: Text that can be omited from license.
-    if (token.normalizedText == '\n') {
+    if (_newLineRegex.hasMatch(token.value)) {
       firstInLine = true;
       continue;
     }
 
-    var char = token.normalizedText.codeUnits.first;
-
-    // Ignores single puntcuations as they are
-    // not significant in detection.
-    if (!_isAlphaNumeric(char) && token.normalizedText.length == 1) {
-      continue;
-    }
-
     // Ignores list items.
-    if (firstInLine && _isListItem(token.normalizedText)) {
+    if (firstInLine && _isListItem(token.value)) {
       continue;
     }
 
     firstInLine = false;
 
-    final text = _cleanToken(token.normalizedText);
+    final text = _cleanToken(token.value);
 
-    output.add(NewToken(text, tokenID++, token.line, token.fileSpan));
+    output.add(Token(text, tokenID++, token.line, token.fileSpan));
   }
 
   return output;
@@ -178,30 +159,13 @@ bool _isListItem(String token) {
   return false;
 }
 
-bool _isDigit(int rune) {
-  return (rune > 47 && rune < 58);
-}
+String _normalizeWord(String text) {
+  // Guideline 5: Equivalent Punctuation marks.
+  _equivalentPunctuationMarks.forEach((reg, value) {
+    text = text.replaceAll(reg, value);
+  });
 
-bool _isLetter(int rune) {
-  return ((rune > 96 && rune < 123) || (rune > 64 && rune < 91));
-}
-
-bool _isSpace(int rune) {
-  return rune == 32;
-}
-
-bool _isAlphaNumeric(int rune) {
-  return _isDigit(rune) || _isLetter(rune);
-}
-
-bool _isNewLine(int char) {
-  switch (char) {
-    case 10:
-    case 12:
-    case 133:
-      return true;
-  }
-  return false;
+  return text;
 }
 
 final _headers = HashSet.from(
@@ -210,7 +174,7 @@ final _headers = HashSet.from(
 
 final _numberHeaderRe = RegExp(r'^\d{1,2}(\.\d{1,2})*[\.)]$');
 
-final _horizontalWhiteSpaceRegex = RegExp(r'[^\S\r\n]');
+final _horizontalWhiteSpaceRegex = RegExp(r'[^\S\r\n]+');
 
 final Map<RegExp, String> _equivalentPunctuationMarks = {
   // Guideline 5.1.2: All variants of dashes considered equivalent.
@@ -218,10 +182,24 @@ final Map<RegExp, String> _equivalentPunctuationMarks = {
 
   // Guideline Guideline 5.1.3: All variants of quotations considered equivalent.
   RegExp(r'[“‟”’"‘‛❛❜〝〞«»‹›❝❞]'): "'",
+
+  // Guideline 9.1.1: “©”, “(c)”, or “Copyright” should be considered equivalent and interchangeable.
+  RegExp(r'©'): '(c)'
 };
+
+final _wordRegex = RegExp(r'[\w\d][^\s]*');
+final _newLineRegex = RegExp(r'(\n|\r\n|\r|\u0085)');
 
 const int _dot = 46;
 const int _hiphen = 45;
+
+bool _isDigit(int rune) {
+  return (rune > 47 && rune < 58);
+}
+
+bool _isLetter(int rune) {
+  return ((rune > 96 && rune < 123) || (rune > 64 && rune < 91));
+}
 
 /// Words obtained from [SPDX corpus][]
 ///
