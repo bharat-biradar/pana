@@ -1,11 +1,12 @@
-//CRC specification
-// Width  : 32
-// Poly   : 0x04c11db7
-// Init   : 0xffffffff
-// RefIn  : true
-// RefOut : true
-// Decimal valyue type: Unsigned
-// CRC 32 Normal specification: https://en.wikipedia.org/wiki/Cyclic_redundancy_check
+/// Computes CRC-32 checksum for [bytes] supplied. Returns unsigned 32 bit integer.
+///
+/// Specification of [CRC-32][1] is same as used in IEEE 802.3 Ethernet (Normal).
+/// Width  : 32
+/// Poly   : 0x04c11db7
+/// Init   : 0xffffffff
+/// RefIn  : true
+/// RefOut : true
+/// [1]: https://en.wikipedia.org/wiki/Cyclic_redundancy_check
 int crc32(List<int> bytes) {
   var crc = 0xffffffff;
   final length = bytes.length;

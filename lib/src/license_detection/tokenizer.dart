@@ -87,8 +87,10 @@ List<Token> _removeListItems(List<Token> tokens) {
 
     newLine = false;
 
-    final text = _cleanToken(tokens[i].token);
+    var text = _cleanToken(tokens[i].token);
 
+    // Guideline 8.1.1: Legally equal words must be treated same.
+    text = _varietalWords[text] ?? text;
     final tok = Token(text, position++, tokens[i].line);
 
     output.add(tok);
@@ -162,3 +164,48 @@ final _numberHeaderRe = RegExp(r'^\d{1,2}(\.\d{1,2})*[\.)]$');
 
 const int _dot = 46;
 const int _hiphen = 45;
+
+/// Words obtained from [SPDX corpus][]
+///
+/// [SPDX corpus]: https://github.com/spdx/license-list-XML/blob/master/equivalentwords.txt
+final HashMap<String, String> _varietalWords = HashMap.from({
+  'acknowledgment': 'acknowledgement',
+  'analogue': 'analog',
+  'analyse': 'analyze',
+  'artefact': 'artifact',
+  'authorization': 'authorisation',
+  'authorized': 'authorised',
+  'calibre': 'caliber',
+  'canceled': 'cancelled',
+  'capitalizations': 'capitalisations',
+  'catalogue': 'catalog',
+  'categorise': 'categorize',
+  'centre': 'center',
+  'copyright holder': 'copyright owner',
+  'emphasised': 'emphasized',
+  'favor': 'favour',
+  'favorite': 'favourite',
+  'fulfil': 'fulfill',
+  'fulfillment': 'fulfilment',
+  'initialise': 'initialize',
+  'judgment': 'judgement',
+  'labelling': 'labeling',
+  'labor': 'labour',
+  'licence': 'license',
+  'maximize': 'maximise',
+  'modelled': 'modeled',
+  'modelling': 'modeling',
+  'offence': 'offense',
+  'optimise': 'optimize',
+  'organization': 'organisation',
+  'organize': 'organise',
+  'practice': 'practise',
+  'programme': 'program',
+  'realise': 'realize',
+  'recognise': 'recognize',
+  'signalling': 'signaling',
+  'utilisation': 'utilization',
+  'whilst': 'while',
+  'wilful': 'wilfull',
+  'http:': 'https:',
+});

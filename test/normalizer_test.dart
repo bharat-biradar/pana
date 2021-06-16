@@ -1,13 +1,14 @@
 import 'package:test/test.dart';
 
-import 'normalizer.dart';
+import 'package:pana/src/license_detection/normalizer.dart';
 
 void main() {
   group('Normalizer tests', () {
     test('SPDX guideline 4.1.1', () {
       expect(normalize('ALL UPPERCASE'), 'all uppercase');
       expect(normalize('Hello!'), 'hello!');
-      expect(normalize('QWERTYUIOPASDFGHJKLZXCVBNM'),'qwertyuiopasdfghjklzxcvbnm');
+      expect(normalize('QWERTYUIOPASDFGHJKLZXCVBNM'),
+          'qwertyuiopasdfghjklzxcvbnm');
     });
 
     test('SPDX guideline 3.1.1', () {

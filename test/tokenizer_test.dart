@@ -18,7 +18,7 @@ void main() {
     });
 
     test('Ignore comments', () {
-      final text = '// a comment line';
+      final text = ' ';
       final expected = <Token>[
         Token('a', 0, 0),
         Token('comment', 1, 0),

@@ -1,12 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:pana/src/license_detection/crc32.dart';
 import 'package:test/test.dart';
 
-import 'crc32.dart';
-
 void main() {
-  final file = File('./lib/src/license_detection/crc32_random.json');
+  final file = File('test/license_test_assets/crc32_random.json');
   var z = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
 
   /// The random vectors were generate using this python code and then
@@ -27,7 +26,7 @@ void main() {
   ///     jsonJ[res] = crc
   /// json.dump(jsonJ, f)
   /// ```
-  /// [GO crc32 package] : https://golang.org/pkg/hash/crc32/
+  /// [GO crc32 package]: https://golang.org/pkg/hash/crc32/
   group('Random vectors', () {
     z.forEach((key, value) {
       test(key, () {
@@ -36,7 +35,7 @@ void main() {
     });
   });
 
-  final allAscii = File('./lib/src/license_detection/crc32_ascii_values.json');
+  final allAscii = File('test/license_test_assets/crc32_ascii_values.json');
   z = jsonDecode(allAscii.readAsStringSync()) as Map<String, dynamic>;
 
   group('All ascii value ', () {
