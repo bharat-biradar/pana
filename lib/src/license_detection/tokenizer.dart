@@ -1,147 +1,147 @@
 import 'dart:collection';
-import 'dart:convert';
 
 import 'package:meta/meta.dart';
-// import 'package:source_span/source_span.dart';
+import 'package:source_span/source_span.dart';
+import 'package:string_scanner/string_scanner.dart';
 
+/// A token in this context is a sequence of characters
+/// scanned from the original text separated by a space
+/// or new line.
 @sealed
 class Token {
-  final String token;
-  final int? position;
-  final int line;
+  /// Normalized form of the text in [span].
+  final String value;
 
-  // TODO : Handle offset and location using source span.
-  // final SourceSpan sourceSpan;
+  /// Denotes the token position.
+  final int index;
 
-  Token(this.token, this.position, this.line);
+  /// Zero based line number of token.
+  int get line => span.start.line;
+
+  /// SourceSpan of the token.
+  final SourceSpan span;
+
+  Token(this.value, this.index, this.span);
+
+  Token.fromSpan(this.span, this.index)
+      : value = _normalizeWord(span.text.toLowerCase());
 }
 
-const lineSplitter = LineSplitter();
+/// The tokens are scanned and normalized according to this procedure.
+/// 1. Tokens are words separated by spaces or new line. Ex - `hello new\nworld` -->[`hello`,`new`,`world`].
+/// 2. Any pure puntcuations texts are ignored. Ex - `// % ^&^&*^ hello` --> [`hello`]
+/// 3. Leading punctuations are ignored. Ex - `!hello $world&` --> [`hello`,`world&`]
+/// 4. New line tokens are stored to stored initially to identify list items,
+///    but later removed while cleaning tokens.
+/// 5. Any tokens starting with alphabet are further cleaned to remove any
+///    non-alphabet characters. Ex - `(hello wo$r1ld` --> [`hello`, `world`]
+/// 6. If a token starts with digit any characters other than `.`, `-` will be ignored.
+///    Dot at the end of the token will also be ignored. `1!@#$.1.1 1-1hj.23.` --> [`1.1.1`, `1-1.23`].
+List<Token> tokenizer(String text) {
+  final _scanner = SpanScanner(text);
 
-/// Create tokens and
-/// normalizes them using the approach of [google licenseClassifier]
-/// to provide better chances of matching.
-/// [google licenseClassifier]  https://github.com/google/licenseclassifier/blob/bb04aff29e72e636ba260ec61150c6e15f111d7e/v2/tokenizer.go#L85
-List<Token> tokenize(String text) {
   var tokens = <Token>[];
-  var offset = 0;
-  var lines = lineSplitter.convert(text);
-  var position = 0;
+  var tokenID = 0;
 
-  for (var i = 0; i < lines.length; i++) {
-    var line = lines[i];
-    var buffer = StringBuffer();
-    var prevSignificant = false;
-
-    for (var rune in line.runes) {
-      offset++;
-      if (!(_isDigit(rune) || _isAsciiLower(rune)) && !prevSignificant) {
-        continue;
-      }
-
-      if (_isSpace(rune)) {
-        if (buffer.isNotEmpty) {
-          _addToken(offset, buffer.toString(), position, i, tokens, text);
-
-          buffer.clear();
-        }
-        prevSignificant = false;
-        continue;
-      }
-
-      buffer.write(String.fromCharCode(rune));
-      prevSignificant = true;
-    }
-    if (buffer.isNotEmpty) {
-      _addToken(offset, buffer.toString(), position, i, tokens, text);
+  Token? nextToken() {
+    if (_scanner.scan(_wordRegex)) {
+      return Token.fromSpan(_scanner.lastSpan!, tokenID++);
     }
 
-    _addToken(offset, '\n', position, i, tokens, text);
+    if (_scanner.scan(_newLineRegex)) {
+      return Token('\n', tokenID++, _scanner.lastSpan!);
+    }
+
+    // Ignore whitespace
+    if (_scanner.scan(_horizontalWhiteSpaceRegex)) {
+      return null;
+    }
+
+    // Read only © and ignore other leading and standalone puntuation
+    // if(_scanner.scan(RegExp(r'©'))){
+    //   return NewToken.fromSpan(_scanner.lastSpan!, tokenID++);
+    // }
+
+    // If none of the above conditions match, this implies
+    // the scanner is at single punctuation mark or leading
+    // punctuation in a word. Ignore them and move the scanner forward.
+    _scanner.readChar();
+    return null;
   }
 
-  //Guideline 7.1.1: Ignore list item for matching purposes.
-  tokens = _removeListItems(tokens);
+  /// Scans through the input text and creates a list of [NewToken]
+  /// Whitespace, Leading or standalone punctuation are ignored as they are not significant.
+  /// But newLine token is stored to deal with list Items.
+  while (!_scanner.isDone) {
+    final token = nextToken();
+
+    if (token != null) {
+      tokens.add(token);
+    }
+  }
+
+  /// Normalizes tokens using the approach of [google licenseClassifier]
+  /// to provide better chances of matching.
+  /// [google licenseClassifier]: https://github.com/google/licenseclassifier/blob/bb04aff29e72e636ba260ec61150c6e15f111d7e/v2/tokenizer.go#L34
+  tokens = _cleanNewTokens(tokens);
 
   return tokens;
 }
 
-void _addToken(int offset, String token, int position, int line,
-    List<Token> tokens, String normText) {
-  tokens.add(Token(token, position++, line));
-}
-
-List<Token> _removeListItems(List<Token> tokens) {
-  var newLine = true;
-  var position = 0;
+List<Token> _cleanNewTokens(List<Token> tokens) {
   var output = <Token>[];
+  var tokenID = 0;
+  var firstInLine = true;
 
-  for (var i = 0; i < tokens.length; i++) {
-    if (newLine && isListItem(tokens[i].token)) {
+  for (var token in tokens) {
+    // Ignore new line tokens for now.
+    // If accuracy of detection is low apply
+    // Guideline 2.1.4: Text that can be omited from license.
+    if (_newLineRegex.hasMatch(token.value)) {
+      firstInLine = true;
       continue;
     }
 
-    if (tokens[i].token == '\n') {
-      newLine = true;
+    // Ignores list items.
+    if (firstInLine && _isListItem(token.value)) {
       continue;
     }
 
-    newLine = false;
+    firstInLine = false;
 
-    var text = _cleanToken(tokens[i].token);
+    final text = _cleanToken(token.value);
 
-    // Guideline 8.1.1: Legally equal words must be treated same.
-    text = _varietalWords[text] ?? text;
-    final tok = Token(text, position++, tokens[i].line);
-
-    output.add(tok);
+    output.add(Token(text, tokenID++, token.span));
   }
 
   return output;
 }
 
+/// Normalizes the tokens using the approach of [google licenseClassifier]
+/// to provide better chances of matching.
+/// [google licenseClassifier]  https://github.com/google/licenseclassifier/blob/bb04aff29e72e636ba260ec61150c6e15f111d7e/v2/tokenizer.go#L85
 String _cleanToken(String tok) {
-  final runes = tok.runes;
-  var buffer = StringBuffer();
+  if (tok.startsWith(RegExp(r'[^a-z]'))) {
+    if (tok.startsWith(RegExp(r'\d'))) {
+      var text = tok.replaceAll(RegExp(r'[^\d\.-]'), '');
 
-  if (!_isAsciiLower(runes.first)) {
-    if (_isDigit(runes.first)) {
-      runes.forEach((rune) {
-        if (_isDigit(rune) || rune == _dot || rune == _hiphen) {
-          buffer.write(String.fromCharCode(rune));
-        }
-      });
-
-      var text = buffer.toString();
-
-      if (text.runes.last == _dot) {
-        text = text.substring(0, text.length);
+      if (text.endsWith('.')) {
+        text = text.substring(0, text.length - 1);
       }
 
       return text;
     }
   }
 
-  runes.forEach((rune) {
-    if (_isAsciiLower(rune)) {
-      buffer.write(String.fromCharCode(rune));
-    }
-  });
-  return buffer.toString();
+  var text = tok.replaceAll(RegExp(r'[^a-z]'), '');
+
+  // If this is a varietal word normalize it according to
+  // Guideline 8.1.1: Legally equal words must be treated same.
+  text = _varietalWords[text] ?? text;
+  return text;
 }
 
-bool _isSpace(int rune) {
-  return rune == 32;
-}
-
-bool _isDigit(int rune) {
-  return (rune > 47 && rune < 58);
-}
-
-bool _isAsciiLower(int rune) {
-  return (rune > 96 && rune < 123);
-}
-
-bool isListItem(String token) {
+bool _isListItem(String token) {
   final end = token[token.length - 1];
   final start = token.substring(0, token.length - 1);
 
@@ -156,19 +156,43 @@ bool isListItem(String token) {
   return false;
 }
 
+String _normalizeWord(String text) {
+  // Guideline 5: Equivalent Punctuation marks.
+  _equivalentPunctuationMarks.forEach((reg, value) {
+    text = text.replaceAll(reg, value);
+  });
+
+  return text;
+}
+
 final _headers = HashSet.from(
     'q w e r t y u i o p a s d f g h j k l z x c v b n m i ii iii iv vi vii ix xi xii'
         .split(' '));
 
 final _numberHeaderRe = RegExp(r'^\d{1,2}(\.\d{1,2})*[\.)]$');
 
-const int _dot = 46;
-const int _hiphen = 45;
+final _horizontalWhiteSpaceRegex = RegExp(r'[^\S\r\n]+');
+
+final Map<RegExp, String> _equivalentPunctuationMarks = {
+  // Guideline 5.1.2: All variants of dashes considered equivalent.
+  RegExp(r'[-֊־᠆‐‑–—﹘﹣－‒⁃⁻⎯─⏤]'): '-',
+
+  // Guideline Guideline 5.1.3: All variants of quotations considered equivalent.
+  RegExp(r'[“‟”’"‘‛❛❜〝〞«»‹›❝❞]'): "'",
+
+  // Guideline 9.1.1: “©”, “(c)”, or “Copyright” should be considered equivalent and interchangeable.
+  RegExp(r'©'): '(c)'
+};
+
+final _wordRegex = RegExp(r'[\w\d][^\s]*');
+final _newLineRegex = RegExp(r'(?:\n|\r\n|\r|\u0085)');
 
 /// Words obtained from [SPDX corpus][]
 ///
 /// [SPDX corpus]: https://github.com/spdx/license-list-XML/blob/master/equivalentwords.txt
-final HashMap<String, String> _varietalWords = HashMap.from({
+// TODO : Some words are left out from the original list
+// find a way to work with remaining words.
+final _varietalWords = {
   'acknowledgment': 'acknowledgement',
   'analogue': 'analog',
   'analyse': 'analyze',
@@ -181,7 +205,6 @@ final HashMap<String, String> _varietalWords = HashMap.from({
   'catalogue': 'catalog',
   'categorise': 'categorize',
   'centre': 'center',
-  'copyright holder': 'copyright owner',
   'emphasised': 'emphasized',
   'favor': 'favour',
   'favorite': 'favourite',
@@ -204,8 +227,16 @@ final HashMap<String, String> _varietalWords = HashMap.from({
   'realise': 'realize',
   'recognise': 'recognize',
   'signalling': 'signaling',
+  'sublicence': 'sublicense',
   'utilisation': 'utilization',
   'whilst': 'while',
   'wilful': 'wilfull',
   'http:': 'https:',
-});
+};
+
+// Remaining varietal words
+// final _varietalWords = {
+//   'copyright holder': 'copyright owner',
+//   'per cent': 'percent',
+//   'sub license': 'sublicense',
+// };
