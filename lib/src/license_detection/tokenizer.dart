@@ -37,7 +37,7 @@ class Token {
 ///    non-alphabet characters. Ex - `(hello wo$r1ld` --> [`hello`, `world`]
 /// 6. If a token starts with digit any characters other than `.`, `-` will be ignored.
 ///    Dot at the end of the token will also be ignored. `1!@#$.1.1 1-1hj.23.` --> [`1.1.1`, `1-1.23`].
-List<Token> tokenizer(String text) {
+List<Token> tokenize(String text) {
   final _scanner = SpanScanner(text);
 
   var tokens = <Token>[];
