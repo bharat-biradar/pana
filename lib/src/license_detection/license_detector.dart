@@ -1,24 +1,17 @@
-import 'package:pana/src/license_detection/tokenizer.dart';
 import 'package:pana/src/license_detection/license.dart';
+import 'package:pana/src/license_detection/primary_filter.dart';
 
+// Load corpus licenses.
+final licenses = loadLicenses();
 // WIP: Returns a list of detected licenses whose
 // confidence score is above a certain threshold.
-List<DetectedLicense> detectLicense(String text) {
-  // Load corpus licenses.
-  final licenses = loadLicenses();
-  print(licenses.length);
-  final tokens = tokenize(text);
-  final checksums = generateChecksums(tokens);
-  final table = generateFrequencyTable(tokens);
-  final unknownLicense = UnknownLicense(text, tokens, table, checksums);
+List<Result> detectLicense(String text) {
+  final unknownLicense = License.parse('', text);
 
-  licenses.forEach((license) {
-    if (unknownLicense.tokenSimilarity(license.frequencyTable) > 0.5) {
-      print(license.licenseName);
-    }
-  });
+  final possibleLicenses = filter(unknownLicense.occurences, licenses);
+  print(possibleLicenses);
 
-  return <DetectedLicense>[];
+  return <Result>[];
 }
 
 // void main() {

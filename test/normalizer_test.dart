@@ -1,6 +1,6 @@
 import 'package:test/test.dart';
 
-import 'package:pana/src/license_detection/normalizer.dart';
+import 'package:pana/src/license_detection/archive/normalizer.dart';
 
 void main() {
   group('Normalizer tests', () {
