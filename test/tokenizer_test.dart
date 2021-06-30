@@ -8,55 +8,35 @@ import 'package:test/test.dart';
 
 void main() {
   group('Tokenizer tests', () {
-    test('Ignore pure punctuations', () {
-      final text = '// hello! ^& world %^& 1.1';
-      final expected = <String>['hello', 'world', '1.1'];
-      final actual = tokenize(text);
+    testTokenizer('Ignore pure punctuations',
+        text: '// hello! ^& world %^& 1.1',
+        expected: ['hello', 'world', '1.1']);
 
-      testOutput(actual, expected);
-    });
+    testTokenizer('Ignore puntuations at start of word',
+        text: '// !hello @#world -1.1.1',
+        expected: ['hello', 'world', '1.1.1']);
 
-    test('Ignore puntuations at start of word', () {
-      final text = '// !hello @#world -1.1.1';
-      final expected = <String>['hello', 'world', '1.1.1'];
-      final actual = tokenize(text);
+    testTokenizer('Ignore puntuation in between a textual world',
+        text: '// hell@o wo\$%^rld', expected: ['hello', 'world']);
 
-      testOutput(actual, expected);
-    });
+    testTokenizer('Allow only hiphens and dots if token starts with digit',
+        text: 'H.E.L.L.O W.O.R.L.D 1!.2#-3',
+        expected: ['hello', 'world', '1.2-3']);
 
-    test('Ignore puntuation in between a textual world', () {
-      final text = '// hell@o wo\$%^rld';
-      final expected = ['hello', 'world'];
-      final actual = tokenize(text);
+    testTokenizer('Ignore List Items',
+        text: '// 1) hello world.\n   vii. This is a text vii.',
+        expected: ['hello', 'world', 'this', 'is', 'a', 'text', 'vii']);
 
-      testOutput(actual, expected);
-    });
-
-    test('Allow only hiphens and dots if token starts with digit', () {
-      final text = 'H.E.L.L.O W.O.R.L.D 1!.2#-3';
-      final expected = ['hello', 'world', '1.2-3'];
-      final actual = tokenize(text);
-
-      testOutput(actual, expected);
-    });
-
-    test('Ignore List Items', () {
-      final text = '// 1) hello world.\n   vii. This is a text vii.';
-      final expected = ['hello', 'world', 'this', 'is', 'a', 'text', 'vii'];
-      final actual = tokenize(text);
-
-      testOutput(actual, expected);
-    });
-
-    test('Basic tokenization', () {
-      // Tokenize at space or new line
-      final text = 'hello    world\r\n take some\n tokens';
-      final expected = ['hello', 'world', 'take', 'some', 'tokens'];
-      final actual = tokenize(text);
-
-      testOutput(actual, expected);
-    });
+    // Tokenize at space or new line.
+    testTokenizer('Basic tokenization',
+        text: 'hello    world\r\n take some\n tokens',
+        expected: ['hello', 'world', 'take', 'some', 'tokens']);
   });
+}
+
+void testTokenizer(String name,
+    {required String text, required List<String> expected}) {
+  test(name, () => testOutput(tokenize(text), expected));
 }
 
 void testOutput(List<Token> actual, List<String> expected) {

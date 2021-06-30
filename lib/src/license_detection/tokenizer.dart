@@ -16,13 +16,17 @@ class Token {
   /// Normalized form of the text in [span].
   final String value;
 
-  /// Denotes the token position.
+  /// Zero based position of token in a list of [Token]s obtained by tokenizing license text.
+  ///
+  /// License when tokenized through [tokenize] method
+  /// yields a list of [Token]. [index] denotes the offset of the token
+  /// in this list.
   final int index;
 
   /// Zero based line number of token.
   int get line => span.start.line;
 
-  /// SourceSpan of the token.
+  /// Location details of the token in original text.
   final SourceSpan span;
 
   Token(this.value, this.index, this.span);
@@ -32,7 +36,7 @@ class Token {
 }
 
 /// Tokenizes license text and returns a list of [Token]s.
-/// 
+///
 /// The tokens are scanned and normalized according to this procedure.
 /// 1. Tokens are words separated by spaces or new line. Ex - `hello new\nworld` -->[`hello`,`new`,`world`].
 /// 2. Any pure puntcuations texts are ignored. Ex - `// % ^&^&*^ hello` --> [`hello`]
@@ -76,7 +80,7 @@ List<Token> tokenize(String text) {
   }
 
   /// Scans through the input text and creates a list of [Token].
-  /// 
+  ///
   /// Whitespace, leading or pure punctuation texts are ignored as they are not significant.
   /// But newLine token is stored to deal with list Items.
   while (!_scanner.isDone) {
@@ -88,11 +92,11 @@ List<Token> tokenize(String text) {
   }
 
   /// Removes unncesary tokens and cleans token value.
-  /// 
+  ///
   /// Some tokens such as newLine and list items are removed
   /// according to [SPDX Guidelines][1] and the values of
   /// remaning token values are cleaned using [google licenseClassifier][] approach.
-  /// 
+  ///
   /// [1]: https://github.com/spdx/spdx-spec/blob/v2.2/chapters/appendix-II-license-matching-guidelines-and-templates.md
   /// [google licenseClassifier]: https://github.com/google/licenseclassifier/blob/bb04aff29e72e636ba260ec61150c6e15f111d7e/v2/tokenizer.go#L34
   tokens = _cleanNewTokens(tokens);
@@ -131,7 +135,7 @@ List<Token> _cleanNewTokens(List<Token> tokens) {
 
 /// Normalizes the tokens using the approach of [google licenseClassifier]
 /// to provide better chances of matching.
-/// 
+///
 /// [google licenseClassifier]  https://github.com/google/licenseclassifier/blob/bb04aff29e72e636ba260ec61150c6e15f111d7e/v2/tokenizer.go#L85
 String _cleanToken(String tok) {
   if (tok.startsWith(RegExp(r'[^a-z]'))) {
