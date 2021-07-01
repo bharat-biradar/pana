@@ -65,17 +65,13 @@ class LicenseMatch {
 /// Genearates a frequency table for the give list of tokens.
 @visibleForTesting
 Map<String, int> generateFrequencyTable(List<Token> tokens) {
-  var map = <String, int>{};
+  var table = <String, int>{};
 
   for (var token in tokens) {
-    if (map.containsKey(token.value)) {
-      map[token.value] = map[token.value]! + 1;
-    } else {
-      map[token.value] = 1;
-    }
+    table[token.value] = table.putIfAbsent(token.value, () => 0) + 1;
   }
 
-  return map;
+  return table;
 }
 
 /// Creates [License] instances for all the corpus licenses.
