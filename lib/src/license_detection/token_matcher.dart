@@ -3,15 +3,20 @@ import 'package:pana/src/license_detection/license.dart';
 /// Instance of range of token matches
 class MatchRange {
   
+  /// Index of first matched known license token in range.
   final int srcStart;
   
+  /// Index of last matched known license token in range.
   int srcEnd;
   
+  /// Index of first matched input token in range.
   final int inpStart;
   
+  /// Index of the last matched input token in range.
   int inpEnd;
   
-  int get tokenCount => inpEnd - inpStart;
+  /// Number of tokens matched in this range.
+  int get tokenCount => inpEnd - inpStart + 1;
 
   MatchRange(this.srcStart, this.srcEnd, this.inpStart, this.inpEnd);
 }
