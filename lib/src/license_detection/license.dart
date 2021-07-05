@@ -33,7 +33,8 @@ class License {
   }
 }
 
-class Checksum {
+@sealed
+class Trigram {
   /// Text for which the hash value was generated.
   final String text;
 
@@ -48,15 +49,16 @@ class Checksum {
   /// Index of the last token in the checksum.
   final int end;
 
-  Checksum(this.text, this.crc32, this.start, this.end);
+  Trigram(this.text, this.crc32, this.start, this.end);
 }
 
+@sealed
 class PossibleLicense {
   final License license;
 
-  final List<Checksum> checksums;
+  final List<Trigram> checksums;
 
-  final Map<int, List<Checksum>> checksumMap;
+  final Map<int, List<Trigram>> checksumMap;
 
   PossibleLicense._(this.license, this.checksums, this.checksumMap);
 
@@ -115,8 +117,8 @@ List<License> loadLicensesFromDirectories(List<String> directories) {
   return List.unmodifiable(licenses);
 }
 
-Map<int, List<Checksum>> generateChecksumMap(List<Checksum> checksums) {
-  var table = <int, List<Checksum>>{};
+Map<int, List<Trigram>> generateChecksumMap(List<Trigram> checksums) {
+  var table = <int, List<Trigram>>{};
   for (var checksum in checksums) {
     table.putIfAbsent(checksum.crc32, () => []).add(checksum);
   }
@@ -152,20 +154,20 @@ List<License> getLicense(String path) {
 
 /// Generates crc-32 value for the given list of tokens
 /// by taking 3 token values at a time.
-List<Checksum> generateChecksums(List<Token> tokens) {
+List<Trigram> generateChecksums(List<Token> tokens) {
   final length = tokens.length - 2;
   if (tokens.length < 3) {
     final text = tokens.join(' ');
-    return [Checksum(text, crc32(utf8.encode(text)), 0, tokens.length - 1)];
+    return [Trigram(text, crc32(utf8.encode(text)), 0, tokens.length - 1)];
   }
-  var checksums = <Checksum>[];
+  var checksums = <Trigram>[];
 
   for (var i = 0; i < length; i++) {
     final text =
         '${tokens[i].value} ${tokens[i + 1].value} ${tokens[i + 2].value}';
     final crcValue = crc32(utf8.encode(text));
 
-    checksums.add(Checksum(text, crcValue, i, i + 2));
+    checksums.add(Trigram(text, crcValue, i, i + 2));
   }
 
   return checksums;
