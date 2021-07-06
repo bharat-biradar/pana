@@ -15,7 +15,7 @@ List<LicenseMatch> detectLicense(String text) {
 
   final possibleLicenses = filter(unknownLicense.occurences, _licenses);
   for (var license in possibleLicenses) {
-    print(license.licenseName);
+    print(license.identifier);
   }
 
   return <LicenseMatch>[];

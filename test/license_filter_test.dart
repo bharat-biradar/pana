@@ -76,7 +76,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.''';
       expect(possibleLicenses.length, 3);
 
       for (var i = 0; i < 3; i++) {
-        expect(possibleLicenses[i].licenseName, possibleLicenseNames[i]);
+        expect(possibleLicenses[i].identifier, possibleLicenseNames[i]);
       }
     });
   });

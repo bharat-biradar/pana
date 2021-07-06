@@ -12,15 +12,16 @@ import 'package:pana/src/license_detection/license.dart';
 /// number of similar tokens through [tokenSimilarity] method and
 /// returns a list of [License] which have a score above certain threshold.
 List<License> filter(
-        Map<String, int> occurrences, List<License> knownLicenses) =>
+        Map<String, int> occurrences, List<License> knownLicenses,) =>
     List.unmodifiable(knownLicenses.where(
         (license) => tokenSimilarity(occurrences, license.occurences) >= 0.5));
 
 /// Returns a measure for token similarity, between [input] and [knownLicense].
 ///
 /// Token Similarity indicates if [License] is plausibly present as a
-/// substring in [input], as determined by frequency tables over tokens given in [input] and
-/// [knownLicense]
+/// substring in [input]. This is determined by frequency tables over tokens given in [input] and
+/// [knownLicense].
+
 // Checks if the unknown text contains enough occurences
 // of tokens in a known license to qualify it as a possible match.
 // It there are less number of a particular token in input as compared to known license
