@@ -1,26 +1,29 @@
 import 'package:meta/meta.dart';
 import 'package:pana/src/license_detection/license.dart';
 
-/// Instance of range of token matches
+/// Instance of range of token matches.
 @sealed
 class MatchRange {
   /// Index of first matched known license token in range.
-  final int srcStart;
+  int srcStart;
 
   /// Index of last matched known license token in range.
   int srcEnd;
 
   /// Index of first matched input token in range.
-  final int inpStart;
+  int inpStart;
 
   /// Index of the last matched input token in range.
   int inpEnd;
 
   /// Number of tokens matched in this range.
-  int get tokenCount => inpEnd - inpStart + 1;
+  int tokenCount;
 
-  MatchRange(this.srcStart, this.srcEnd, this.inpStart, this.inpEnd);
+  MatchRange(
+      this.srcStart, this.srcEnd, this.inpStart, this.inpEnd, this.tokenCount);
 }
+
+void getMatchRanges() {}
 
 @visibleForTesting
 List<MatchRange> getTargetMatchedRanges(
@@ -43,9 +46,8 @@ List<MatchRange> getTargetMatchedRanges(
         continue;
       }
       print('add new ${checksum.text}');
-      offsetMap
-          .putIfAbsent(offset, () => [])
-          .add(MatchRange(cSum.start, cSum.end, checksum.start, checksum.end));
+      offsetMap.putIfAbsent(offset, () => []).add(MatchRange(cSum.start,
+          cSum.end, checksum.start, checksum.end, cSum.end - cSum.end + 1));
     }
   }
 
@@ -61,13 +63,13 @@ int _sortComparator(MatchRange matchA, MatchRange matchB) =>
 
 @visibleForTesting
 List<MatchRange> detectRuns(List<MatchRange> matches, PossibleLicense input,
-    PossibleLicense knownLicense, double confidenceThreshold,int granularity) {
+    PossibleLicense knownLicense, double confidenceThreshold, int granularity) {
   final inputTokensCount = input.license.tokens.length;
 
   if (inputTokensCount == 0) {
     return [];
   }
-  
+
   final licenseTokenCount = knownLicense.license.tokens.length;
   var subsetLength = licenseTokenCount > inputTokensCount
       ? licenseTokenCount
@@ -110,12 +112,12 @@ List<MatchRange> detectRuns(List<MatchRange> matches, PossibleLicense input,
   }
 
   var finalOut = <MatchRange>[
-    MatchRange(out[0], out[0] + granularity, 0, 0),
+    MatchRange(out[0], out[0] + granularity, 0, 0, granularity),
   ];
 
   for (var i = 1; i < out.length; i++) {
     if (out[i] != 1 + out[i - 1]) {
-      finalOut.add(MatchRange(out[i], out[i] + granularity, 0, 0));
+      finalOut.add(MatchRange(out[i], out[i] + granularity, 0, 0, granularity));
     } else {
       finalOut.last.srcEnd = out[i] + granularity;
     }
@@ -124,48 +126,79 @@ List<MatchRange> detectRuns(List<MatchRange> matches, PossibleLicense input,
   return finalOut;
 }
 
-void fuseMatchRanges(String licenseText, List<MatchRange> matches,
+List<MatchRange> fuseMatchedRanges(String licenseText, List<MatchRange> matches,
     double confidence, int size, List<MatchRange> runs, int targetSize) {
-      var claimed = <MatchRange>[];
-      final errorMargin = (size * (1 - confidence)).round();
+  
+  var claimed = <MatchRange>[];
+  final errorMargin = (size * (1 - confidence)).round();
 
-      var filter = List.filled(targetSize, false);
-      var filterDrops = 0;
-      var filterPasses = 0;
+  var filter = List.filled(targetSize, false);
 
-      for (var match in matches) {
-        for (var i = match.inpStart; i <= match.inpEnd; i++) {
-          filter[i] = true;
+  for (var match in runs) {
+    for (var i = match.srcStart; i <= match.srcEnd; i++) {
+      filter[i] = true;
+    }
+  }
+
+  for (var match in matches) {
+    var offset = match.inpStart - match.srcStart;
+
+    if (offset < 0) {
+      if (-offset <= errorMargin) {
+        offset = 0;
+      } else {
+        continue;
       }
     }
 
-    for(var match in matches){
-      var offset = match.inpStart - match.srcStart;
+    if (!filter[offset]) {
+      continue;
+    }
 
-      if(offset<0){
-        if(-offset <= errorMargin){
-          offset = 0;
-        }else{
-          continue;
+    var unclaimed = true;
+
+    for (var claim in claimed) {
+      var matchOffset = match.inpStart - match.srcStart;
+      var claimOffset = claim.inpStart - claim.srcStart;
+
+      var sampleError = (matchOffset - claimOffset).abs().round();
+      var withinError = sampleError < errorMargin;
+
+      if (withinError && (match.tokenCount > sampleError)) {
+        if (match.inpStart >= claim.inpEnd && match.inpEnd <= claim.inpEnd) {
+          claim.tokenCount += match.tokenCount;
+          unclaimed = false;
+        } else {
+          if (match.inpStart < claim.inpStart &&
+              match.srcStart < claim.srcStart) {
+            claim.inpStart = match.inpStart;
+            claim.srcStart = match.srcStart;
+            claim.tokenCount += match.tokenCount;
+            unclaimed = false;
+          } else if (match.inpEnd > claim.inpEnd &&
+              match.srcEnd > claim.srcEnd) {
+            claim.inpEnd = match.inpEnd;
+            claim.srcEnd = match.srcEnd;
+            claim.tokenCount += match.tokenCount;
+            unclaimed = false;
+          }
         }
       }
 
-      if(!filter[offset]){
-        filterDrops++;
-        continue;
-      }
-
-      filterPasses++;
-
-      var unclaimed = true;
-
-      for(var claim in claimed){
-        
+      if (!unclaimed) {
+        break;
       }
     }
 
+    if (unclaimed && match.tokenCount * 10 > matches[0].tokenCount) {
+      claimed.add(match);
+    }
+  }
+
+  return claimed;
 }
-void main(){
+
+void main() {
   final a = License.parse('a', target);
   final b = License.parse('b', target);
 
@@ -175,11 +208,12 @@ void main(){
   final lis = getTargetMatchedRanges(aa, bb);
 
   lis.forEach((element) {
-    print('start: ${element.inpStart} end: ${element.inpEnd} src_start: ${element.srcStart} src_start: ${element.srcEnd} ');
-    print('${a.tokens[element.inpStart].value} ${a.tokens[element.inpStart].index}');
+    print(
+        'start: ${element.inpStart} end: ${element.inpEnd} src_start: ${element.srcStart} src_start: ${element.srcEnd} ');
+    print(
+        '${a.tokens[element.inpStart].value} ${a.tokens[element.inpStart].index}');
   });
 }
-
 
 var target = '''
 ***
@@ -212,7 +246,7 @@ var target = '''
  * THE POSSIBILITY OF SUCH DAMAGE.
  */''';
 
- var source = '''Copyright (c) <year> <owner>. All rights reserved.
+var source = '''Copyright (c) <year> <owner>. All rights reserved.
 
  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  
