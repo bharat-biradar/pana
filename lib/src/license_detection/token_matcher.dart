@@ -1,36 +1,57 @@
 import 'package:meta/meta.dart';
 import 'package:pana/src/license_detection/license.dart';
 
-/// Instance of [Trigram](s) match in input text and a known license.
+/// Instance of [Ngram](s) match in input text and a known license.
 @sealed
 class MatchRange {
-  /// Index of first matched known license token in range.
-  int srcStart;
 
-  /// Index of last matched known license token in range.
-  int srcEnd;
+  /// Range of tokens that were found to be a match in input text.
+  TokenRange input;
 
-  /// Index of first matched input token in range.
-  int inpStart;
+  /// Range of tokens that were found to be a match in known license.
+  TokenRange source;
 
-  /// Index of the last matched input token in range.
-  int inpEnd;
+  /// Number of tokens that were matched in this range.
+  int tokensClaimed;
 
-  /// Number of tokens matched in this range.
-  int tokenCount;
+  MatchRange._(
+    this.input,
+    this.source,
+    this.tokensClaimed,
+  );
+}
 
-  MatchRange(
-      this.srcStart, this.srcEnd, this.inpStart, this.inpEnd, this.tokenCount);
+/// Indicates the start and end index for a range of tokens. 
+@sealed
+class TokenRange {
+  /// Start index of the token in this range. 
+  int start;
+
+  /// End index(exclusive) of the token in this range.
+  int end;
+
+  TokenRange._(this.start, this.end);
 }
 
 /// Returns a list of [MatchRange] for [input] that might be the best possible match for [source].
-List<MatchRange> findPotentialMatches(PossibleLicense input,
-    PossibleLicense source, double confidence, int granularity) {
-  final matchedRanges = getMatchRanges(input, source, confidence, granularity);
-  final threshold = (confidence * input.license.tokens.length).toInt();
+List<MatchRange> findPotentialMatches(
+  PossibleLicense input,
+  PossibleLicense source,
+  double confidence,
+  int granularity,
+) {
+  final matchedRanges = getMatchRanges(
+    input,
+    source,
+    confidence,
+    granularity,
+  );
+
+  // Minimum number of tokens that range must have to be considered a possible match.
+  final threshold = (confidence * source.license.tokens.length).toInt();
 
   for (var i = 0; i < matchedRanges.length; i++) {
-    if (matchedRanges[i].tokenCount < threshold) {
+    if (matchedRanges[i].tokensClaimed < threshold) {
       return List.unmodifiable(matchedRanges.sublist(0, i));
     }
   }
@@ -38,29 +59,40 @@ List<MatchRange> findPotentialMatches(PossibleLicense input,
   return List.unmodifiable(matchedRanges);
 }
 
+/// Returns a list of [MatchRange] for tokens in [input] that were found to be a match for [source].
 @visibleForTesting
-List<MatchRange> getMatchRanges(PossibleLicense input, PossibleLicense source,
-    double confidence, int granularity) {
+List<MatchRange> getMatchRanges(
+  PossibleLicense input,
+  PossibleLicense source,
+  double confidence,
+  int granularity,
+) {
+  // Collect all the matches irrespective of the number of tokens claimed 
+  // in the range (Can be less then the threshold number of tokens).
   final matches = getTargetMatchedRanges(source, input, granularity);
 
   if (matches.isEmpty) {
     return [];
   }
 
+  // Analyse all the matches that were found and figure out which 
   final runs = detectRuns(matches, input, source, confidence, granularity);
 
   if (runs.isEmpty) {
     return [];
   }
 
-  return fuseMatchedRanges(source.license.content, matches, confidence,
+  return fuseMatchedRanges(matches, confidence,
       source.license.tokens.length, runs, input.license.tokens.length);
 }
 
-/// Returns a list of [MatchRange] for all the continuous range of [Trigram](s) matched in [input] and [source].
+/// Returns a list of [MatchRange] for all the continuous range of [Ngram](s) matched in [input] and [source].
 @visibleForTesting
 List<MatchRange> getTargetMatchedRanges(
-    PossibleLicense source, PossibleLicense input, int granularity) {
+  PossibleLicense source,
+  PossibleLicense input,
+  int granularity,
+) {
   var offsetMap = <int, List<MatchRange>>{};
   var matches = <MatchRange>[];
 
@@ -78,23 +110,25 @@ List<MatchRange> getTargetMatchedRanges(
       // Check if this source checksum extend the last match
       // and update the last match for this offset accordingly.
       if (offsetMap.containsKey(offset) &&
-          (offsetMap[offset]!.last.inpEnd == tgtChecksum.end - 1)) {
-        offsetMap[offset]!.last.srcEnd = srcChecksum.end;
-        offsetMap[offset]!.last.inpEnd = tgtChecksum.end;
+          (offsetMap[offset]!.last.input.end == tgtChecksum.end - 1)) {
+        offsetMap[offset]!.last.source.end = srcChecksum.end;
+        offsetMap[offset]!.last.input.end = tgtChecksum.end;
         continue;
       }
 
       // Add new instance of matchRange if doesn't extend the last
       // match of the same offset.
-      offsetMap.putIfAbsent(offset, () => []).add(MatchRange(srcChecksum.start,
-          srcChecksum.end, tgtChecksum.start, tgtChecksum.end, granularity));
+      offsetMap.putIfAbsent(offset, () => []).add(
+            MatchRange._(TokenRange._(tgtChecksum.start, tgtChecksum.end),
+                TokenRange._(srcChecksum.start, srcChecksum.end), granularity),
+          );
     }
   }
 
   for (var list in offsetMap.values) {
     // Update the token count of match range.
     for (var match in list) {
-      match.tokenCount = match.inpEnd - match.inpStart;
+      match.tokensClaimed = match.input.end - match.input.start;
     }
     matches.addAll(list);
   }
@@ -105,14 +139,19 @@ List<MatchRange> getTargetMatchedRanges(
   return List.unmodifiable(matches);
 }
 
-/// Returns list of [MatchRange] for all the clusters of ordered [Trigram] in [input] that might be a potential match to the [source].
+/// Returns list of [MatchRange] for all the clusters of ordered [Ngram] in [input] that might be a potential match to the [source].
 ///
 /// For a sequence of N tokens to be considered a potential match,
-/// it should have atleast (N * [confidenceThreshold]) number of tokens
-/// that appear in atleast in one matching [Trigram].
+/// it should have at least (N * [confidenceThreshold]) number of tokens
+/// that appear in at least in one matching [Ngram].
 @visibleForTesting
-List<MatchRange> detectRuns(List<MatchRange> matches, PossibleLicense input,
-    PossibleLicense source, double confidenceThreshold, int granularity) {
+List<TokenRange> detectRuns(
+  List<MatchRange> matches,
+  PossibleLicense input,
+  PossibleLicense source,
+  double confidenceThreshold,
+  int granularity,
+) {
   final inputTokensCount = input.license.tokens.length;
   final licenseTokenCount = source.license.tokens.length;
 
@@ -120,9 +159,9 @@ List<MatchRange> detectRuns(List<MatchRange> matches, PossibleLicense input,
   // or number of source tokens.
   //
   // If the input has lesser number of tokens than the source
-  // i.e target doesn't has atleast one subset of source
+  // i.e target doesn't has at least one subset of source
   // we decrease the subset length to number of tokens in the
-  // input and analyze what we have.
+  // input and analyse what we have.
   final subsetLength = inputTokensCount < licenseTokenCount
       ? inputTokensCount
       : licenseTokenCount;
@@ -133,15 +172,15 @@ List<MatchRange> detectRuns(List<MatchRange> matches, PossibleLicense input,
   var hits = List<bool>.filled(inputTokensCount, false);
 
   for (var match in matches) {
-    for (var i = match.inpStart; i < match.inpEnd; i++) {
+    for (var i = match.input.start; i < match.input.end; i++) {
       hits[i] = true;
     }
   }
 
   // Initialize the total number of matches for the first window
   // i.e [0,subsetLength).
-  var totalMatches =
-      hits.sublist(0, subsetLength).where((element) => element).length;
+  var totalMatches = 
+      hits.take(subsetLength).where((element) => element).length;
 
   var out = <int>[];
   if (totalMatches >= targetTokens) {
@@ -173,40 +212,54 @@ List<MatchRange> detectRuns(List<MatchRange> matches, PossibleLicense input,
     return [];
   }
 
-  var finalOut = <MatchRange>[
-    MatchRange(out[0], out[0] + granularity, 0, 0, 0),
+  var finalOut = <TokenRange>[
+    TokenRange._(
+      out[0],
+      out[0] + granularity,
+    )
   ];
 
   // Create a list of matchRange from the token indexes that were
   // were considered to be a potential match.
   for (var i = 1; i < out.length; i++) {
     if (out[i] != 1 + out[i - 1]) {
-      finalOut.add(MatchRange(0, 0, out[i], out[i] + granularity, 0));
+      finalOut.add(TokenRange._(out[i], out[i] + granularity));
     } else {
-      finalOut.last.inpEnd = out[i] + granularity;
+      finalOut.last.end = out[i] + granularity;
     }
   }
 
   return List.unmodifiable(finalOut);
 }
 
-/// Fuse
+/// Analyze and combine [matches] with no error into larger range of matches with some tolerable amount of error.
+/// 
+/// All the [matches] detected having no false positives are
+/// compared with each other to check if they can be merged with
+/// each other to produce larger [MatchRange] that might have enough
+/// number of tokens to be considered a match for input text while
+/// keeping the error within a certain margin.
 @visibleForTesting
-List<MatchRange> fuseMatchedRanges(String licenseText, List<MatchRange> matches,
-    double confidence, int size, List<MatchRange> runs, int targetSize) {
+List<MatchRange> fuseMatchedRanges(
+  List<MatchRange> matches,
+  double confidence,
+  int size,
+  List<TokenRange> runs,
+  int targetSize,
+) {
   var claimed = <MatchRange>[];
   final errorMargin = (size * (1 - confidence)).round();
 
   var filter = List.filled(targetSize, false);
 
   for (var match in runs) {
-    for (var i = match.inpStart; i < match.inpEnd; i++) {
+    for (var i = match.start; i < match.end; i++) {
       filter[i] = true;
     }
   }
 
   for (var match in matches) {
-    var offset = match.inpStart - match.srcStart;
+    var offset = match.input.start - match.source.start;
 
     if (offset < 0) {
       if (-offset <= errorMargin) {
@@ -224,19 +277,20 @@ List<MatchRange> fuseMatchedRanges(String licenseText, List<MatchRange> matches,
 
     var unclaimed = true;
 
-    final matchOffset = match.inpStart - match.srcStart;
+    final matchOffset = match.input.start - match.source.start;
     for (var claim in claimed) {
-      var claimOffset = claim.inpStart - claim.srcStart;
+      var claimOffset = claim.input.start - claim.source.start;
 
       var sampleError = (matchOffset - claimOffset).abs();
       final withinError = sampleError < errorMargin;
 
-      // The offset error
-      if (withinError && (match.tokenCount > sampleError)) {
+      
+      if (withinError && (match.tokensClaimed > sampleError)) {
         // Check if this match lies within the claim, if does just update the number
         // of token count.
-        if (match.inpStart >= claim.inpEnd && match.inpEnd <= claim.inpEnd) {
-          claim.tokenCount += match.tokenCount;
+        if (match.input.start >= claim.input.start &&
+            match.input.end <= claim.input.end) {
+          claim.tokensClaimed += match.tokensClaimed;
           unclaimed = false;
         }
         // Check if the claim and match can be merged.
@@ -244,20 +298,21 @@ List<MatchRange> fuseMatchedRanges(String licenseText, List<MatchRange> matches,
           // Match is within error margin and claim is likely to
           // be an extension of match. So we update the input and
           // source start offsets of claim.
-          if (match.inpStart < claim.inpStart &&
-              match.srcStart < claim.srcStart) {
-            claim.inpStart = match.inpStart;
-            claim.srcStart = match.srcStart;
-            claim.tokenCount += match.tokenCount;
+          if (match.input.start < claim.input.start &&
+              match.source.start < claim.source.start) {
+            claim.input.start = match.input.start;
+            claim.source.start = match.source.start;
+            claim.tokensClaimed += match.tokensClaimed;
             unclaimed = false;
           }
           // Match is within error margin and match is likely to
           // to extend claim. So we update the input and source
           // end offsets of claim.
-          else if (match.inpEnd > claim.inpEnd && match.srcEnd > claim.srcEnd) {
-            claim.inpEnd = match.inpEnd;
-            claim.srcEnd = match.srcEnd;
-            claim.tokenCount += match.tokenCount;
+          else if (match.input.end > claim.input.end &&
+              match.source.end > claim.source.end) {
+            claim.input.end = match.input.end;
+            claim.source.end = match.source.end;
+            claim.tokensClaimed += match.tokensClaimed;
             unclaimed = false;
           }
         }
@@ -273,7 +328,7 @@ List<MatchRange> fuseMatchedRanges(String licenseText, List<MatchRange> matches,
 
     // Add as a new claim if it is relevant and has higher quality of
     // hits.
-    if (unclaimed && match.tokenCount * 10 > matches[0].tokenCount) {
+    if (unclaimed && match.tokensClaimed * 10 > matches[0].tokensClaimed) {
       claimed.add(match);
     }
   }
@@ -284,65 +339,8 @@ List<MatchRange> fuseMatchedRanges(String licenseText, List<MatchRange> matches,
 }
 
 /// [Comparator] to sort list of [MatchRange] in descending order of their token count.
-int _sortOnTokenCount(MatchRange matchA, MatchRange matchB) =>
-    (matchA.tokenCount > matchB.tokenCount ? -1 : 1);
-
-// void main() {
-//   // var target = 'a b c k d e f';
-//   // var source = 'a b c d e f';
-//   final a = License.parse('a', source);
-//   final b = License.parse('b', target);
-
-//   final src = PossibleLicense.parse(a);
-//   final tgt = PossibleLicense.parse(b);
-
-//   final matches = getTargetMatchedRanges(src, tgt, 3);
-//   matches.forEach((element) {
-//     print(
-//         'start: ${element.inpStart} end: ${element.inpEnd} src_start: ${element.srcStart} src_end: ${element.srcEnd} claimed:${element.tokenCount}');
-//   });
-//   var runs = detectRuns(matches, tgt, src, 0.75, 3);
-//   print('Runs');
-//   runs.forEach((element) {
-//     print(
-//         'start: ${element.inpStart} end: ${element.inpEnd} src_start: ${element.srcStart} src_end: ${element.srcEnd} claimed:${element.tokenCount}');
-//   });
-// }
-
-// var target = '''
-//  * Redistribution and use in source and binary forms, with or without
-//  * modification, are permitted provided that the following conditions
-//  * are met:
-//  * 1. Redistributions of source code must retain the above copyright
-//  *    notice, this list of conditions and the following disclaimer.
-//  * 2. Redistributions in binary form must reproduce the above copyright
-//  *    notice, this list of conditions and the following disclaimer in the
-//  *    documentation and/or other materials provided with the distribution.
-//  * 3. Neither the name of the copyright holders nor the names of its
-//  *    contributors may be used to endorse or promote products derived from
-//  *    this software without specific prior written permission.
-//  *
-//  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-//  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-//  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-//  * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-//  * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-//  * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-//  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-//  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-//  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-//  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
-//  * THE POSSIBILITY OF SUCH DAMAGE.
-//  */''';
-
-// var source = '''
-//  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-
-//  1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
-
-//  2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
-
-//  3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
-
-//  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//  ''';
+int _sortOnTokenCount(
+  MatchRange matchA,
+  MatchRange matchB,
+) =>
+    (matchA.tokensClaimed > matchB.tokensClaimed ? -1 : 1);
