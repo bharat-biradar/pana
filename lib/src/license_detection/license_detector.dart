@@ -11,11 +11,11 @@ final _licenses = loadLicensesFromDirectories(_directories);
 // WIP: Returns a list of detected licenses whose
 // confidence score is above a certain threshold.
 List<LicenseMatch> detectLicense(String text) {
-  final unknownLicense = PossibleLicense.parse(License.parse('', text));
+  final unknownLicense = License.parse('', text);
 
-  final possibleLicenses = filter(unknownLicense.license.occurences, _licenses);
+  final possibleLicenses = filter(unknownLicense.occurrences, _licenses);
   for (var license in possibleLicenses) {
-    print(license.licenseName);
+    print(license.identifier);
   }
 
   return <LicenseMatch>[];

@@ -30,9 +30,9 @@ void main() {
         loadLicensesFromDirectories(['test/license_test_assets/licenses']);
     const licenseNames = [
       'agpl_v3',
-      'agpl_v3_NOEND',
+      'agpl_v3',
       'apache_v2',
-      'apache_v2_NOEND',
+      'apache_v2',
       'bsd_2_clause',
       'bsd_2_clause_in_comments',
       'bsd_3_clause'
@@ -41,8 +41,11 @@ void main() {
     expect(licenses.length, 7);
 
     for (var i = 0; i < 7; i++) {
-      expect(licenses[i].licenseName, licenseNames[i]);
+      expect(licenses[i].identifier, licenseNames[i]);
     }
+
+    expect(() => loadLicensesFromDirectories(['test/license_test_assets/']),
+        throwsFormatException);
   });
 
   test('Test checksum generation', () {
@@ -59,3 +62,5 @@ void main() {
     }
   });
 }
+
+
