@@ -63,7 +63,7 @@ class PossibleLicense {
   PossibleLicense._(this.license, this.checksums, this.checksumMap);
 
   factory PossibleLicense.parse(License license) {
-    final checksums = generateChecksums(license.tokens);
+    final checksums = generateChecksums(license.tokens, 3);
     final table = generateChecksumMap(checksums);
     return PossibleLicense._(license, checksums, table);
   }
@@ -154,20 +154,22 @@ List<License> getLicense(String path) {
 
 /// Generates crc-32 value for the given list of tokens
 /// by taking 3 token values at a time.
-List<Trigram> generateChecksums(List<Token> tokens) {
-  final length = tokens.length - 2;
-  if (tokens.length < 3) {
+List<Trigram> generateChecksums(List<Token> tokens, int granularity) {
+  if (tokens.length < granularity) {
     final text = tokens.join(' ');
     return [Trigram(text, crc32(utf8.encode(text)), 0, tokens.length - 1)];
   }
+
   var checksums = <Trigram>[];
 
-  for (var i = 0; i < length; i++) {
-    final text =
-        '${tokens[i].value} ${tokens[i + 1].value} ${tokens[i + 2].value}';
+  for (var i = 0; i + granularity <= tokens.length; i++) {
+    var text = '';
+    tokens.sublist(i, i + granularity).forEach((token) {
+      text += token.value + ' ';
+    });
     final crcValue = crc32(utf8.encode(text));
 
-    checksums.add(Trigram(text, crcValue, i, i + 2));
+    checksums.add(Trigram(text, crcValue, i, i + granularity));
   }
 
   return checksums;

@@ -26,7 +26,8 @@ void main() {
   });
 
   test('Load licenses from directory', () {
-    final licenses = loadLicensesFromDirectories(['test/license_test_assets']);
+    final licenses =
+        loadLicensesFromDirectories(['test/license_test_assets/licenses']);
     const licenseNames = [
       'agpl_v3',
       'agpl_v3_NOEND',
@@ -46,12 +47,14 @@ void main() {
 
   test('Test checksum generation', () {
     final text = 'generate some checksums for these tokens';
-    final expected = [3962172993, 64424052, 2567598150, 1463275497];
-    final actual = generateChecksums(tokenize(text));
+    final expected = [3898316725, 3188174184, 1984569744, 820879958];
+    final actual = generateChecksums(tokenize(text), 3);
 
     expect(actual.length, expected.length);
 
     for (var i = 0; i < actual.length; i++) {
+      print(
+          'Text: ${actual[i].text} start: ${actual[i].start} end: ${actual[i].end}');
       expect(actual[i].crc32, expected[i]);
     }
   });
