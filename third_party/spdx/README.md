@@ -5,4 +5,4 @@ in `lib/src/license_detection/` for detecting SPDX license identifier given `LIC
 All the licenses were obtained from -
 
 * **Source:** [SPDX repository](https://github.com/spdx/license-list-data)
-* **Current revision** - `3.13`
+* **Current revision** - `3.14`

@@ -5,4 +5,3 @@
 pubspec.lock
 test/license_test_assets/license_scenarios
 .vscode
-third_party/spdx/licenses
